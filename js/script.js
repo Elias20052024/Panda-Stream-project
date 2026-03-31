@@ -1177,19 +1177,19 @@ async function init() {
     document.title = t('nav_movies') + ' | PandaStream';
     await displaySlider();
     await displayPopularMovies();
-  } else if (page.endsWith('shows.html')) {
+  } else if (page.endsWith('shows.html') || page === '/shows') {
     document.title = t('nav_tvshows') + ' | PandaStream';
     await displayPopularTVShows();
-  } else if (page.endsWith('movie-details.html')) {
-    await displaySearchedMovieDetails();
-  } else if (page.endsWith('tv-details.html')) {
+  } else if (page.endsWith('movie-details.html') || page === '/movie-details') {
+    await displayMovieDetails();
+  } else if (page.endsWith('tv-details.html') || page === '/tv-details') {
     await displayShowDetails();
-  } else if (page.endsWith('search.html')) {
+  } else if (page.endsWith('search.html') || page === '/search') {
     document.title = t('search_button') + ' | PandaStream';
     await search();
-  } else if (page.endsWith('searched-tv-details.html')) {
+  } else if (page.endsWith('searched-tv-details.html') || page === '/searched-tv-details') {
     await displaySearchedTVDetails();
-  } else if (page.endsWith('searched-movie-details.html')) {
+  } else if (page.endsWith('searched-movie-details.html') || page === '/searched-movie-details') {
     console.log("Calling displaySearchedMovieDetails()");
     await displaySearchedMovieDetails();
   } else {
