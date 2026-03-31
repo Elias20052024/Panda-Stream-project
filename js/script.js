@@ -59,13 +59,11 @@ function updateLanguage(lang) {
     searchInput.placeholder = translations[lang].search_placeholder;
   }
 
-  // Refresh dynamic content if needed
+  // Search page: re-run search after i18n updates. Avoid init() on details pages:
+  // init() calls updateLanguage() at the end, which would recurse indefinitely.
   const currentPage = window.location.pathname;
   if (currentPage.endsWith('search.html')) {
-    search(); // Refresh search results
-  } else if (currentPage.includes('details')) {
-    // Refresh details page
-    init();
+    search();
   }
 }
 
@@ -1291,4 +1289,3 @@ function showDisclaimerModal() {
   style.innerHTML = `@keyframes disclaimerFadeIn { from { opacity: 0; transform: scale(0.95);} to { opacity: 1; transform: scale(1);} }`;
   document.head.appendChild(style);
 }
-
