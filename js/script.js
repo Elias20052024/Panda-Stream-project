@@ -1,13 +1,34 @@
 // --- i18n language switching logic ---
+function formatString(str, ...args) {
+  return str.replace(/{(\d+)}/g, (match, index) => args[index] !== undefined ? args[index] : match);
+}
+
+function t(key, ...args) {
+  const lang = localStorage.getItem('selectedLang') || 'en-US';
+  if (!translations[lang] || !translations[lang][key]) {
+    console.warn(`Translation missing for key: ${key} in language: ${lang}`);
+    return key;
+  }
+  const translation = translations[lang][key];
+  return args.length > 0 ? formatString(translation, ...args) : translation;
+}
+
 function updateLanguage(lang) {
   if (typeof translations === 'undefined') return;
+  
   // Update text content
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
+    const args = el.getAttribute('data-i18n-args');
     if (translations[lang] && translations[lang][key]) {
-      el.textContent = translations[lang][key];
+      if (args) {
+        el.textContent = formatString(translations[lang][key], ...JSON.parse(args));
+      } else {
+        el.textContent = translations[lang][key];
+      }
     }
   });
+
   // Update alt attributes
   document.querySelectorAll('[data-i18n-alt]').forEach(el => {
     const key = el.getAttribute('data-i18n-alt');
@@ -15,24 +36,73 @@ function updateLanguage(lang) {
       el.alt = translations[lang][key];
     }
   });
+
   // Update placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (translations[lang] && translations[lang][key]) {
+      el.placeholder = translations[lang][key];
+    }
+  });
+
+  // Update titles
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    if (translations[lang] && translations[lang][key]) {
+      el.title = translations[lang][key];
+    }
+  });
+
+  // Update search placeholder
   const searchInput = document.getElementById('search-term');
   if (searchInput && translations[lang] && translations[lang].search_placeholder) {
     searchInput.placeholder = translations[lang].search_placeholder;
+  }
+
+  // Refresh dynamic content if needed
+  const currentPage = window.location.pathname;
+  if (currentPage.endsWith('search.html')) {
+    search(); // Refresh search results
+  } else if (currentPage.includes('details')) {
+    // Refresh details page
+    init();
   }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
   const langSelector = document.getElementById('language-selector');
   if (!langSelector) return;
+  
+  // Set initial language
   const lang = localStorage.getItem('selectedLang') || langSelector.value || 'en-US';
   langSelector.value = lang;
+  global.language = lang;
+  
+  // Apply translations
   updateLanguage(lang);
+  
+  // Handle language changes
   langSelector.addEventListener('change', function() {
     const newLang = this.value;
     localStorage.setItem('selectedLang', newLang);
+    global.language = newLang;
+    
+    // Update translations
     updateLanguage(newLang);
+    
+    // Refresh dynamic content
+    const currentPage = global.currentPage;
+    if (currentPage.includes('details')) {
+      // For details pages, reload to get content in new language
+      window.location.reload();
+    } else {
+      // For other pages, refresh content without reload
+      init();
+    }
   });
+  
+  // RTL language support
+  document.documentElement.dir = lang === 'ar-SA' ? 'rtl' : 'ltr';
 });
 const global = {
   currentPage: window.location.pathname,
@@ -51,6 +121,8 @@ const global = {
 // Add global language variable and selector event
 if (!global.language) {
   global.language = localStorage.getItem("flixx-language") || "en-US";
+}
+
 // ...existing code...
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -78,6 +150,7 @@ async function displayPopularMovies() {
   data.results.forEach((movie) => {
     const div = document.createElement("div");
     div.classList.add("card");
+    const lang = localStorage.getItem('selectedLang') || 'en-US';
     div.innerHTML = `
       <div class="card">
         <a href="movie-details.html?id=${movie.id}">
@@ -90,7 +163,7 @@ async function displayPopularMovies() {
         <div class="card-body">
           <h5 class="card-title">${movie.title}</h5>
           <p class="card-text">
-            <small class="text-muted">Release: ${movie.release_date}</small>
+            <small class="text-muted"><span data-i18n="release_date">${t('release_date')}</span>: ${movie.release_date}</small>
           </p>
         </div>
       </div>
@@ -130,7 +203,7 @@ async function displayPopularTVShows() {
           <div class="card-body">
             <h5 class="card-title">${show.name}</h5>
             <p class="card-text">
-              <small class="text-muted">Release: ${show.first_air_date}</small>
+              <small class="text-muted"><span data-i18n="release_date">${t('release_date')}</span>: ${show.first_air_date}</small>
             </p>
           </div>
         </div>
@@ -159,6 +232,9 @@ async function displayMovieDetails() {
 
   const movie = await fetchAPIData(`movie/${movieId}`);
   hideSpinner();
+
+  // Update document title
+  document.title = `PandaStream | ${movie.title}${movie.original_title ? ` (${movie.original_title})` : ''}`;
 
   const container = document.getElementById("movie-details");
   if (!container) return;
@@ -455,7 +531,7 @@ async function search() {
     const { results, total_pages, page } = await searchMovies();
 
     if (!results || results.length === 0) {
-      showAlert("No results found");
+      showAlert(t('no_results'));
       return;
     }
 
@@ -466,7 +542,7 @@ async function search() {
 
     document.querySelector("#search-term").value = "";
   } else {
-    showAlert("Please enter a search term");
+    showAlert(t('enter_search_term'));
   }
 }
 
@@ -490,7 +566,7 @@ function displaySearchResults(results) {
   heading.style.textAlign = "center";
   heading.style.fontWeight = "700";
   heading.style.fontSize = "2rem";
-  heading.innerHTML = `Search Results <span style='font-size:1rem;font-weight:400;'>(Page ${global.search.page} of ${global.search.totalPages})</span>`;
+  heading.innerHTML = `${t('search_results')} <span style='font-size:1rem;font-weight:400;'>(${t('page_of', global.search.page, global.search.totalPages)})</span>`;
   searchResultsContainer.appendChild(heading);
   results.forEach((result) => {
     const div = document.createElement("div");
@@ -631,6 +707,34 @@ async function searchWithPage() {
   }
 }
 
+// HTML translation helper function
+function translateHTML(html, lang) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  
+  // Translate attributes with data-i18n-*
+  doc.querySelectorAll('[data-i18n], [data-i18n-alt], [data-i18n-placeholder], [data-i18n-title]').forEach(el => {
+    if (el.hasAttribute('data-i18n')) {
+      const key = el.getAttribute('data-i18n');
+      el.textContent = t(key);
+    }
+    if (el.hasAttribute('data-i18n-alt')) {
+      const key = el.getAttribute('data-i18n-alt');
+      el.alt = t(key);
+    }
+    if (el.hasAttribute('data-i18n-placeholder')) {
+      const key = el.getAttribute('data-i18n-placeholder');
+      el.placeholder = t(key);
+    }
+    if (el.hasAttribute('data-i18n-title')) {
+      const key = el.getAttribute('data-i18n-title');
+      el.title = t(key);
+    }
+  });
+  
+  return doc.body.innerHTML;
+}
+
 // Display Slider Movies
 async function displaySlider() {
   const { results } = await fetchAPIData("movie/now_playing");
@@ -639,7 +743,7 @@ async function displaySlider() {
     const div = document.createElement("div");
     div.classList.add("swiper-slide");
 
-    div.innerHTML = `
+    const html = `
             <a href="movie-details.html?id=${movie.id}">
               <img src="${
                 movie.poster_path
@@ -653,6 +757,8 @@ async function displaySlider() {
               )} / 10
             </h4>
     `;
+    
+    div.innerHTML = translateHTML(html, localStorage.getItem('selectedLang') || 'en-US');
     document.querySelector(".swiper-wrapper").appendChild(div);
 
     initSwiper();
@@ -687,7 +793,7 @@ function initSwiper() {
 async function fetchAPIData(endpoint) {
   const API_KEY = global.api.apiKey;
   const API_URL = global.api.apiUrl;
-  const language = global.language || "en-US";
+  const language = localStorage.getItem('selectedLang') || 'en-US';
   showSpinner();
   try {
     const url = `${API_URL}/${endpoint}?api_key=${API_KEY}&language=${language}`;
@@ -704,6 +810,17 @@ async function fetchAPIData(endpoint) {
     }
     const parsed = JSON.parse(text);
     console.log(`[DEBUG] fetchAPIData response for endpoint:`, endpoint, parsed);
+    
+    // For movie/tv details, also fetch English title if in another language
+    if (language !== 'en-US' && (endpoint.includes('movie/') || endpoint.includes('tv/'))) {
+      const enUrl = `${API_URL}/${endpoint}?api_key=${API_KEY}&language=en-US`;
+      const enResponse = await fetch(enUrl);
+      if (enResponse.ok) {
+        const enData = await enResponse.json();
+        parsed.original_title = enData.title || enData.name;
+      }
+    }
+    
     return parsed;
   } catch (error) {
     console.error("[DEBUG] API fetch error:", error, 'for endpoint:', endpoint);
@@ -968,10 +1085,13 @@ async function displaySearchedMovieDetails() {
     console.error("[DEBUG] No movie data returned for id:", movieId);
     const errorDiv = document.createElement("div");
     errorDiv.innerHTML =
-      '<p class="text-danger">Movie not found or API error.</p>';
+      `<p class="text-danger" data-i18n="movie_not_found">Movie not found or API error.</p>`;
     detailsContainer.appendChild(errorDiv);
     return;
   }
+  
+  // Update document title with movie name
+  document.title = `PandaStream | ${movie.title}`;
   displayBackgroundImage("movie", movie.backdrop_path);
   // Fetch cast
   let castHtml = '';
@@ -1042,22 +1162,30 @@ async function displaySearchedMovieDetails() {
 }
 
 // Init App
-
 async function init() {
   console.log("init() function called");
   const page = global.currentPage;
   console.log("global.currentPage:", `"${page}"`);
-  console.log("page.endsWith('searched-movie-details.html'):", page.endsWith('searched-movie-details.html'));
+  
+  // Set page language
+  const lang = localStorage.getItem('selectedLang') || 'en-US';
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'ar-SA' ? 'rtl' : 'ltr';
+  
+  // Update page title based on current page
   if (page === '/' || page.endsWith('index.html')) {
+    document.title = t('nav_movies') + ' | PandaStream';
     await displaySlider();
     await displayPopularMovies();
   } else if (page.endsWith('shows.html')) {
+    document.title = t('nav_tvshows') + ' | PandaStream';
     await displayPopularTVShows();
   } else if (page.endsWith('movie-details.html')) {
     await displaySearchedMovieDetails();
   } else if (page.endsWith('tv-details.html')) {
     await displayShowDetails();
   } else if (page.endsWith('search.html')) {
+    document.title = t('search_button') + ' | PandaStream';
     await search();
   } else if (page.endsWith('searched-tv-details.html')) {
     await displaySearchedTVDetails();
@@ -1067,7 +1195,11 @@ async function init() {
   } else {
     console.log("No matching page found for init()");
   }
+  
   highlightActiveLink();
+  
+  // Update all translations
+  updateLanguage(lang);
 }
 
 // ...existing code...
@@ -1078,8 +1210,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function showDisclaimerModal() {
-  // Prevent duplicate modals
-  if (document.getElementById('disclaimer-modal')) return;
+  // Check if disclaimer has already been shown in this session
+  if (sessionStorage.getItem('disclaimerShown') || document.getElementById('disclaimer-modal')) return;
   // Modal overlay
   const overlay = document.createElement('div');
   overlay.id = 'disclaimer-overlay';
@@ -1125,12 +1257,12 @@ function showDisclaimerModal() {
   closeBtn.style.transition = 'color 0.2s';
   closeBtn.onmouseover = () => (closeBtn.style.color = '#f1c40f');
   closeBtn.onmouseout = () => (closeBtn.style.color = '#fff');
-  closeBtn.onclick = () => {
+    closeBtn.onclick = () => {
     overlay.remove();
     document.body.style.overflow = '';
-  };
-
-  // Disclaimer content (text only, no logo)
+    // Mark that disclaimer has been shown in this session
+    sessionStorage.setItem('disclaimerShown', 'true');
+  };  // Disclaimer content (text only, no logo)
   modal.innerHTML = `
     <h3 style="margin-top:0;font-size:1.4rem;display:flex;align-items:center;gap:8px;">📌 Disclaimer</h3>
     <p>
@@ -1158,6 +1290,5 @@ function showDisclaimerModal() {
   const style = document.createElement('style');
   style.innerHTML = `@keyframes disclaimerFadeIn { from { opacity: 0; transform: scale(0.95);} to { opacity: 1; transform: scale(1);} }`;
   document.head.appendChild(style);
-}
 }
 
